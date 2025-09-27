@@ -1,0 +1,53 @@
+[
+  {
+    "id": "Find_1",
+    "text": "Where do you notice the part in or around your body?",
+    "type": "text",
+    "options": []
+  },
+  {
+    "id": "Find_2",
+    "text": "How are you aware of this part?",
+    "type": "text",
+    "options": []
+  },
+  {
+    "id": "Find_3",
+    "text": "How do you sense or experience this part? (Focus your attention on however you’re experiencing it)",
+    "type": "text",
+    "options": []
+  },
+  {
+    "id": "FleshOut_1",
+    "text": "What are you noticing about it?",
+    "type": "text",
+    "options": []
+  },
+  {
+    "id": "FleshOut_2",
+    "text": "Does it have a shape, color, image, words, smell, temperature, texture...?",
+    "type": "text",
+    "options": []
+  },
+  {
+    "id": "Feel_1",
+    "text": "How do you feel towards this part?",
+    "type": "text",
+    "options": []
+  },
+  {
+    "id": "Self_Check",
+    "text": "Are you experiencing any of the following while noticing this part (click all that appy)?",
+    "type": "checkbox",
+    "options": [
+      "Curiosity",
+      "Compassion",
+      "Calm",
+      "Clarity",
+      "Courage",
+      "Confidence",
+      "Creativity",
+      "Connectedness"
+    ]
+  }
+]
