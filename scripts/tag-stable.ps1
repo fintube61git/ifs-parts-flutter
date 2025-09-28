@@ -3,7 +3,7 @@
 #   .\scripts\tag-stable.ps1
 #
 # Behavior:
-#   - Finds latest tag matching ^vX.Y.Z (ignores any suffix like -stable-...)
+#   - Finds latest tag matching ^vX.Y.Z (ignores suffixes like -stable-...)
 #   - Bumps MINOR: v1.1.0 -> v1.2.0 (PATCH reset to 0)
 #   - Commits pending changes (message includes version)
 #   - Creates/updates branch: stable-vX.Y.Z (from current HEAD)
@@ -16,10 +16,8 @@ param()
 $ErrorActionPreference = "Stop"
 
 function Get-NextMinorVersion {
-    # Collect all tags beginning with 'v'
     $tags = git tag --list "v*" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
 
-    # Parse semantic core 'vX.Y.Z' from each tag, ignoring suffixes like '-stable-...'
     $parsed = @()
     foreach ($t in $tags) {
         if ($t -match '^v(\d+)\.(\d+)\.(\d+)') {
@@ -29,13 +27,11 @@ function Get-NextMinorVersion {
     }
 
     if ($parsed.Count -eq 0) {
-        # No prior versioned tags: start at v1.0.0
-        return [version]::new(1,0,0)
+        return [version]::new(1,0,0)   # start at v1.0.0
     }
 
     $latest = ($parsed | Sort-Object Version -Descending | Select-Object -First 1).Version
-    # bump MINOR, reset PATCH
-    return [version]::new($latest.Major, $latest.Minor + 1, 0)
+    return [version]::new($latest.Major, $latest.Minor + 1, 0)  # bump MINOR, reset PATCH
 }
 
 # Derive next version
@@ -47,13 +43,13 @@ $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $branch = "stable-$baseVersion"
 $tag    = "$baseVersion-stable-$timestamp"
 
-Write-Host "=== Creating stable for $baseVersion ($tag) ===" -ForegroundColor Cyan
+Write-Host "=== Creating stable for ${baseVersion} (${tag}) ===" -ForegroundColor Cyan
 
 # Stage & commit any pending changes
 git add -A
 $changes = git status --porcelain
 if ($changes) {
-    git commit -m "Stable snapshot $baseVersion: auto-commit before tagging"
+    git commit -m "Stable snapshot ${baseVersion}: auto-commit before tagging"
 } else {
     Write-Host "No pending changes; proceeding with current HEAD..." -ForegroundColor DarkGray
 }
@@ -65,9 +61,9 @@ git push -u origin $branch
 # Create annotated tag; if it already exists, abort to avoid ambiguity
 $existing = git tag --list $tag
 if ($existing) {
-    throw "Tag '$tag' already exists. Resolve manually or re-run to mint a new timestamp."
+    throw "Tag '${tag}' already exists. Resolve manually or re-run to mint a new timestamp."
 }
-git tag -a $tag -m "Stable $baseVersion ($timestamp): auto-tagged"
+git tag -a $tag -m "Stable ${baseVersion} (${timestamp}): auto-tagged"
 git push origin $tag
 
 Write-Host ""
