@@ -6,7 +6,7 @@ import "package:flutter/services.dart" show rootBundle;
 import "package:package_info_plus/package_info_plus.dart";
 import "package:pdf/pdf.dart";
 import "package:pdf/widgets.dart" as pw;
-import "package:printing/printing.dart"; // PdfGoogleFonts
+import "package:printing/printing.dart" show PdfGoogleFonts;
 import "package:provider/provider.dart";
 
 import "controllers/card_controller.dart";
@@ -35,11 +35,14 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   String _version = "";
+  CardController? _cardController; // persist across theme toggles
+  int? _total; // cached deck size
 
   @override
   void initState() {
     super.initState();
     _loadVersion();
+    _initDeckAndController();
   }
 
   Future<void> _loadVersion() async {
@@ -51,6 +54,14 @@ class _MyAppState extends State<MyApp> {
     } catch (_) {
       // ignore
     }
+  }
+
+  Future<void> _initDeckAndController() async {
+    final total = await _loadImageCount();
+    setState(() {
+      _total = total;
+      _cardController = CardController(total: total);
+    });
   }
 
   /// Count images under assets/images/ using the runtime AssetManifest.
@@ -73,18 +84,26 @@ class _MyAppState extends State<MyApp> {
         }).toList();
         return imgs.length;
       }
-    } catch (_) {
-      // fall through
-    }
-    // Fallback so the app still runs even if manifest parsing changes.
-    return 75;
+    } catch (_) {}
+    return 75; // fallback
   }
 
   @override
   Widget build(BuildContext context) {
-    // Provide ThemeController immediately so the shell renders correctly.
-    return ChangeNotifierProvider(
-      create: (_) => ThemeController(),
+    if (_cardController == null || _total == null) {
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ThemeController>(create: (_) => ThemeController()),
+        ChangeNotifierProvider<CardController>.value(value: _cardController!),
+      ],
       child: Consumer<ThemeController>(
         builder: (context, theme, _) {
           return MaterialApp(
@@ -93,37 +112,21 @@ class _MyAppState extends State<MyApp> {
             themeMode: theme.mode,
             theme: ThemeData.light(useMaterial3: true),
             darkTheme: ThemeData.dark(useMaterial3: true),
-            home: FutureBuilder<int>(
-              future: _loadImageCount(),
-              builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return const Scaffold(
-                    body: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final total = snap.data ?? 0;
-
-                // CRITICAL: Provide CardController *above* CardScreen.
-                return ChangeNotifierProvider<CardController>(
-                  create: (_) => CardController(total: total),
-                  child: Stack(
-                    children: [
-                      const CardScreen(), // no args; reads CardController via Provider
-                      if (_version.isNotEmpty)
-                        Positioned(
-                          right: 10,
-                          bottom: 8,
-                          child: IgnorePointer(
-                            child: Text(
-                              _version,
-                              style: const TextStyle(fontSize: 11, color: Colors.grey),
-                            ),
-                          ),
-                        ),
-                    ],
+            home: Stack(
+              children: [
+                const CardScreen(),
+                if (_version.isNotEmpty)
+                  Positioned(
+                    right: 10,
+                    bottom: 8,
+                    child: IgnorePointer(
+                      child: Text(
+                        _version,
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                    ),
                   ),
-                );
-              },
+              ],
             ),
           );
         },
@@ -160,14 +163,13 @@ String buildExportHtmlFrom(List<ExportCard> cards) {
   buf.writeln("<html><head><meta charset='utf-8'>");
   buf.writeln("<title>IFS Review Export</title>");
   buf.writeln(
-      "<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:20px;} .card{display:grid;grid-template-columns:320px 1fr;gap:16px;page-break-after:always;margin-bottom:24px;} .img{border:1px solid #ddd;padding:8px;border-radius:8px;background:#fafafa} img{max-width:100%;height:auto} h2{margin:.2rem 0 .6rem 0;font-size:1.1rem} .qa{line-height:1.45} .q{font-weight:600;margin-top:.6rem} .a{margin-left:.6rem;white-space:pre-wrap} .muted{color:#666} .badge{display:inline-block;border:1px solid #bbb;padding:2px 6px;border-radius:999px;margin-right:6px;margin-bottom:4px;font-size:.9rem}</style>");
+      "<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:20px;} .card{display:grid;grid-template-columns:320px 1fr;gap:16px;page-break-after:always;margin-bottom:24px;} .img{padding:8px;border-radius:8px;background:#fafafa} img{max-width:100%;height:auto} h2{margin:.2rem 0 .6rem 0;font-size:1.1rem} .qa{line-height:1.45} .q{font-weight:600;margin-top:.6rem} .a{margin-left:.6rem;white-space:pre-wrap} .muted{color:#666}</style>");
   buf.writeln("</head><body>");
   for (var i = 0; i < cards.length; i++) {
     final c = cards[i];
     buf.writeln("<section class='card'>");
     buf.write("<div class='img'>");
-    final imgTag = _htmlImageTag(c);
-    buf.write(imgTag);
+    buf.write(_htmlImageTag(c));
     buf.writeln("</div>");
     buf.writeln("<div class='qa'>");
     buf.writeln("<h2>Card ${i + 1}</h2>");
@@ -183,11 +185,8 @@ String buildExportHtmlFrom(List<ExportCard> cards) {
         if (ans.isEmpty) {
           buf.writeln("<div class='a muted'>(no answer)</div>");
         } else {
-          buf.write("<div class='a'>");
-          for (final item in ans.cast<String>()) {
-            buf.write("<span class='badge'>${_escapeHtml(item)}</span>");
-          }
-          buf.writeln("</div>");
+          final items = ans.cast<String>().map(_escapeHtml).toList();
+          buf.writeln("<div class='a'>• ${items.join("   • ")}</div>");
         }
       } else {
         buf.writeln("<div class='a muted'>(no answer)</div>");
@@ -210,65 +209,60 @@ String _htmlImageTag(ExportCard c) {
   return "<div class='muted'>[asset: ${_escapeHtml(p)} not embedded]</div>";
 }
 
-/// ---------- PDF export (zero decoration: no borders, no fills, no pills) ----------
+/// ---------- PDF export (borderless, no shapes; Google fonts) ----------
 Future<Uint8List> buildExportPdfFrom(List<ExportCard> cards) async {
-  // Use Google fonts to guarantee Unicode without local TTF parsing
-  final pw.Font regular = await PdfGoogleFonts.notoSansRegular();
-  final pw.Font bold = await PdfGoogleFonts.notoSansBold();
+  // Google-hosted Unicode fonts (avoids Helvetica warnings and local TTFs)
+  final base = await PdfGoogleFonts.notoSansRegular();
+  final bold = await PdfGoogleFonts.notoSansBold();
 
-  final theme = pw.ThemeData.withFont(base: regular, bold: bold);
-  final doc = pw.Document(theme: theme);
+  final doc = pw.Document();
 
   for (var i = 0; i < cards.length; i++) {
     final c = cards[i];
 
-    // Image panel: no decoration at all; just constrain width.
-    final imagePanel = pw.SizedBox(
-      width: 180,
-      child: _pdfImageWidget(c),
-    );
-
-    pw.Widget answersForList(List<String> items) {
-      // Render as simple bullet text list to avoid any vector shapes.
-      return pw.Wrap(
-        spacing: 6,
-        runSpacing: 2,
-        children: items.map((s) => pw.Text("• $s", style: const pw.TextStyle(fontSize: 10))).toList(),
-      );
-    }
-
     doc.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(24, 24, 24, 24),
         build: (context) {
-          return pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              imagePanel,
-              pw.SizedBox(width: 12),
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      "Card ${i + 1}",
-                      style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-                    ),
-                    pw.SizedBox(height: 8),
-                    for (var q = 0; q < c.questions.length; q++)
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.only(bottom: 6),
-                        child: _pdfQuestionAnswerPlain(c, q, answersForList),
-                      ),
-                  ],
+          return pw.Theme(
+            data: pw.ThemeData.withFont(base: base, bold: bold),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // Image column: NO border, NO background, NO decoration
+                pw.Container(
+                  width: 180,
+                  padding: const pw.EdgeInsets.all(6),
+                  child: _pdfImageWidget(c),
                 ),
-              ),
-            ],
+                pw.SizedBox(width: 12),
+                // Text column: plain text only (no chip borders)
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        "Card ${i + 1}",
+                        style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                      ),
+                      pw.SizedBox(height: 8),
+                      for (var q = 0; q < c.questions.length; q++)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(bottom: 6),
+                          child: _pdfQuestionAnswer(c, q),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),
     );
   }
+
   return doc.save();
 }
 
@@ -291,36 +285,40 @@ pw.Widget _pdfImageWidget(ExportCard c) {
       style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey));
 }
 
-pw.Widget _pdfQuestionAnswerPlain(
-  ExportCard c,
-  int q,
-  pw.Widget Function(List<String>) answersForList,
-) {
+pw.Widget _pdfQuestionAnswer(ExportCard c, int q) {
   final qText = c.questions[q].text;
   final ans = (q < c.answers.length) ? c.answers[q] : null;
 
-  final children = <pw.Widget>[
-    pw.Text("Q${q + 1}: $qText", style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+  final widgets = <pw.Widget>[
+    pw.Text(
+      "Q${q + 1}: $qText",
+      style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+    ),
     pw.SizedBox(height: 2),
   ];
 
   if (ans == null) {
-    children.add(pw.Text("(no answer)", style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey)));
+    widgets.add(pw.Text("(no answer)",
+        style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey)));
   } else if (ans is String) {
-    children.add(pw.Text(ans, style: const pw.TextStyle(fontSize: 11)));
+    widgets.add(pw.Text(ans, style: const pw.TextStyle(fontSize: 11)));
   } else if (ans is List) {
     if (ans.isEmpty) {
-      children.add(pw.Text("(no answer)", style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey)));
+      widgets.add(pw.Text("(no answer)",
+          style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey)));
     } else {
-      children.add(answersForList(ans.cast<String>()));
+      final items = ans.cast<String>();
+      final bullet = "• ${items.join("   • ")}";
+      widgets.add(pw.Text(bullet, style: const pw.TextStyle(fontSize: 11)));
     }
   } else {
-    children.add(pw.Text("(no answer)", style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey)));
+    widgets.add(pw.Text("(no answer)",
+        style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey)));
   }
 
   return pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
-    children: children,
+    children: widgets,
   );
 }
 

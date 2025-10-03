@@ -40,10 +40,30 @@ class CardScreen extends StatelessWidget {
 
     final dynamic ctrl = context.watch<CardController>();
 
+    // Total cards (controller first, fallback)
     final int total = _readInt(() => ctrl.total, orElse: () => _readInt(() => ctrl.totalCards, orElse: () => 75));
-    final int idx   = _readInt(() => ctrl.index, orElse: () => _readInt(() => ctrl.currentIndex, orElse: () => 0));
-    final int humanIndex = (idx + 1).clamp(1, total);
 
+    // REAL index (used for assets/answers/export)
+    final int idx = _readInt(() => ctrl.index, orElse: () => _readInt(() => ctrl.currentIndex, orElse: () => 0));
+
+    // HUMAN COUNTER (visible position → 1-based for "Card X of Y"), no unnecessary casts
+    final int humanIndex = (() {
+      try {
+        final v = ctrl.displayIndexOneBased;
+        if (v is int && v > 0) return v.clamp(1, total);
+      } catch (_) {}
+      try {
+        final v = ctrl.position;
+        if (v is int) return (v + 1).clamp(1, total);
+      } catch (_) {}
+      try {
+        final v = ctrl.visibleIndex;
+        if (v is int) return (v + 1).clamp(1, total);
+      } catch (_) {}
+      return (idx + 1).clamp(1, total);
+    })();
+
+    // Answer counts (controller first, then AnswerStore)
     final int controllerAnswered = _readInt(
       () => ctrl.answeredCount,
       orElse: () => _readInt(() => ctrl.answeredCardCount, orElse: () => 0),
@@ -51,6 +71,7 @@ class CardScreen extends StatelessWidget {
     final int fallbackAnswered = AnswerStore.instance.answeredCardCount(total);
     final int answeredCount = controllerAnswered + fallbackAnswered;
 
+    // Image path (controller path if provided; else resolver will probe)
     String? imagePath;
     try {
       imagePath = ctrl.currentImagePath();
@@ -62,6 +83,7 @@ class CardScreen extends StatelessWidget {
       }
     }
 
+    // Questions (controller-provided or from questions.json)
     List<dynamic> questions;
     try {
       questions = List<dynamic>.from(ctrl.currentQuestions());
@@ -133,7 +155,7 @@ class CardScreen extends StatelessWidget {
                           child: SingleChildScrollView(
                             scrollDirection: Axis.vertical,
                             child: _CardImage(
-                              cardIndex: idx,
+                              cardIndex: idx, // REAL index drives asset lookup
                               providedAssetPath: imagePath,
                             ),
                           ),
@@ -148,7 +170,7 @@ class CardScreen extends StatelessWidget {
                       child: Column(
                         children: [
                           _NavBar(
-                            humanIndex: humanIndex,
+                            humanIndex: humanIndex, // COUNTER position
                             total: total,
                             onBack: () {
                               try { ctrl.prev(); return; } catch (_) {}
@@ -164,7 +186,7 @@ class CardScreen extends StatelessWidget {
                             child: _QuestionsArea(
                               ctrl: ctrl,
                               totalCards: total,
-                              cardIndex: idx,
+                              cardIndex: idx, // REAL index for answers/questions
                               providedQuestions: questions,
                             ),
                           ),
@@ -194,7 +216,7 @@ class CardScreen extends StatelessWidget {
 class _CardImage extends StatelessWidget {
   const _CardImage({required this.cardIndex, required this.providedAssetPath});
 
-  final int cardIndex; // 0-based
+  final int cardIndex; // REAL index, 0-based
   final String? providedAssetPath;
 
   Future<String?> _resolveAsset() async {
@@ -254,7 +276,7 @@ class _CardImage extends StatelessWidget {
   }
 }
 
-/// ------- Questions area (with fallbacks; ListView is non-primary so Space reaches TextField) --------
+/// ------- Questions area --------
 class _QuestionsArea extends StatefulWidget {
   const _QuestionsArea({
     required this.ctrl,
@@ -265,7 +287,7 @@ class _QuestionsArea extends StatefulWidget {
 
   final dynamic ctrl;
   final int totalCards;
-  final int cardIndex;
+  final int cardIndex; // REAL index
   final List<dynamic> providedQuestions;
 
   @override

@@ -1,5 +1,5 @@
 name: ifs_parts_flutter
-description: IFS Parts Exploration
+description: "IFS Parts Exploration"
 publish_to: "none"
 
 environment:
@@ -15,7 +15,7 @@ dependencies:
   provider: ^6.1.2
   path_provider: ^2.1.3
   file_selector: ^1.0.3
-  printing: ^5.13.4
+  printing: ^5.13.4            # <- we use PdfGoogleFonts from THIS package
   pdf: 3.10.7
   package_info_plus: ^8.0.0
 
@@ -28,5 +28,6 @@ flutter:
   uses-material-design: true
 
   assets:
+    # Cards & questions
     - assets/images/
     - assets/questions.json
