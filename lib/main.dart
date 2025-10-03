@@ -2,88 +2,150 @@
 import "dart:typed_data";
 
 import "package:flutter/material.dart";
-import "package:provider/provider.dart";
+import "package:flutter/services.dart" show rootBundle;
+import "package:package_info_plus/package_info_plus.dart";
+import "package:pdf/pdf.dart";
 import "package:pdf/widgets.dart" as pw;
-import "package:pdf/pdf.dart" as pdf; // for PdfColor
+import "package:printing/printing.dart"; // PdfGoogleFonts
+import "package:provider/provider.dart";
 
 import "controllers/card_controller.dart";
-import "controllers/ui_heartbeat.dart";
 import "screens/card_screen.dart";
 
 void main() {
-  runApp(const IfsApp());
+  runApp(const MyApp());
 }
 
-class ThemeController with ChangeNotifier {
-  ThemeMode mode = ThemeMode.system;
+/// Exposed so card_screen.dart can `show ThemeController` from main.dart.
+class ThemeController extends ChangeNotifier {
+  ThemeMode _mode = ThemeMode.system;
+  ThemeMode get mode => _mode;
+
   void toggle() {
-    if (mode == ThemeMode.light) {
-      mode = ThemeMode.dark;
-    } else if (mode == ThemeMode.dark) {
-      mode = ThemeMode.light;
-    } else {
-      mode = ThemeMode.dark;
-    }
+    _mode = (_mode == ThemeMode.dark) ? ThemeMode.light : ThemeMode.dark;
     notifyListeners();
   }
 }
 
-class IfsApp extends StatelessWidget {
-  const IfsApp({super.key});
+class MyApp extends StatefulWidget {
+  const MyApp({super.key});
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  String _version = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      setState(() {
+        _version = "v${info.version}+${info.buildNumber}";
+      });
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  /// Count images under assets/images/ using the runtime AssetManifest.
+  /// Includes: .png .jpg .jpeg .webp .gif; excludes names containing "icon".
+  Future<int> _loadImageCount() async {
+    try {
+      final raw = await rootBundle.loadString("AssetManifest.json");
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        final keys = decoded.keys.cast<String>();
+        final imgs = keys.where((k) {
+          if (!k.startsWith("assets/images/")) return false;
+          final lower = k.toLowerCase();
+          if (lower.contains("icon")) return false;
+          return lower.endsWith(".png") ||
+              lower.endsWith(".jpg") ||
+              lower.endsWith(".jpeg") ||
+              lower.endsWith(".webp") ||
+              lower.endsWith(".gif");
+        }).toList();
+        return imgs.length;
+      }
+    } catch (_) {
+      // fall through
+    }
+    // Fallback so the app still runs even if manifest parsing changes.
+    return 75;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        // Your controller requires `total:`; use 75 per assets/images count.
-        ChangeNotifierProvider<CardController>(create: (_) => CardController(total: 75)),
-        ChangeNotifierProvider<UiHeartbeat>(create: (_) => UiHeartbeat()),
-        ChangeNotifierProvider<ThemeController>(create: (_) => ThemeController()),
-      ],
+    // Provide ThemeController immediately so the shell renders correctly.
+    return ChangeNotifierProvider(
+      create: (_) => ThemeController(),
       child: Consumer<ThemeController>(
-        builder: (_, theme, __) => MaterialApp(
-          title: "IFS Parts Exploration",
-          themeMode: theme.mode,
-          theme: ThemeData(
-            useMaterial3: true,
-            colorSchemeSeed: Colors.indigo,
-            brightness: Brightness.light,
-          ),
-          darkTheme: ThemeData(
-            useMaterial3: true,
-            colorSchemeSeed: Colors.indigo,
-            brightness: Brightness.dark,
-          ),
-          home: const _HomeShell(),
-        ),
+        builder: (context, theme, _) {
+          return MaterialApp(
+            title: "IFS Parts Exploration",
+            debugShowCheckedModeBanner: false,
+            themeMode: theme.mode,
+            theme: ThemeData.light(useMaterial3: true),
+            darkTheme: ThemeData.dark(useMaterial3: true),
+            home: FutureBuilder<int>(
+              future: _loadImageCount(),
+              builder: (context, snap) {
+                if (snap.connectionState != ConnectionState.done) {
+                  return const Scaffold(
+                    body: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final total = snap.data ?? 0;
+
+                // CRITICAL: Provide CardController *above* CardScreen.
+                return ChangeNotifierProvider<CardController>(
+                  create: (_) => CardController(total: total),
+                  child: Stack(
+                    children: [
+                      const CardScreen(), // no args; reads CardController via Provider
+                      if (_version.isNotEmpty)
+                        Positioned(
+                          right: 10,
+                          bottom: 8,
+                          child: IgnorePointer(
+                            child: Text(
+                              _version,
+                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-class _HomeShell extends StatelessWidget {
-  const _HomeShell();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: CardScreen(),
-    );
-  }
+/// ---------- Export model used by CardScreen ----------
+class ExportQuestion {
+  final String text;
+  ExportQuestion(this.text);
 }
 
-/// =====================================================
-/// EXPORT HELPERS (HTML + PDF) – compile-safe, easy to wire
-/// Models used by CardScreen export actions.
-/// =====================================================
-
 class ExportCard {
-  final String? base64Image;      // optional inline image
-  final String? imagePath;        // fallback text if missing image
+  final String? base64Image;
+  final String? imagePath;
   final List<ExportQuestion> questions;
-  final List<dynamic> answers;    // String or List<String> (for checkbox)
+  /// answers[i] is either a String (text) or List<String> (checkboxes) or null
+  final List<dynamic> answers;
 
-  const ExportCard({
+  ExportCard({
     required this.base64Image,
     required this.imagePath,
     required this.questions,
@@ -91,149 +153,182 @@ class ExportCard {
   });
 }
 
-class ExportQuestion {
-  final String text;
-  const ExportQuestion(this.text);
-}
-
-/// ---- HTML ----
-String buildExportHtmlFrom(List<ExportCard> models) {
-  final buffer = StringBuffer();
-  buffer.writeln("<!DOCTYPE html>");
-  buffer.writeln('<html lang="en"><head><meta charset="utf-8">');
-  buffer.writeln('<meta name="viewport" content="width=device-width, initial-scale=1">');
-  buffer.writeln("<title>IFS Parts – Export</title>");
-  buffer.writeln("<style>");
-  buffer.writeln("  body { font-family: Arial, sans-serif; margin: 16px; }");
-  buffer.writeln("  .card { display: grid; grid-template-columns: 1fr 1.2fr; gap: 16px; page-break-after: always; }");
-  buffer.writeln("  .imgwrap { border: 1px solid #ccc; padding: 8px; }");
-  buffer.writeln("  .qa { }");
-  buffer.writeln("  .q { font-weight: bold; margin-top: 8px; }");
-  buffer.writeln("  .a { white-space: pre-wrap; }");
-  buffer.writeln("</style></head><body>");
-
-  for (final cm in models) {
-    final imgHtml = _imageHtml(cm.base64Image, cm.imagePath);
-    buffer.writeln('<section class="card">');
-    buffer.writeln('<div class="imgwrap">$imgHtml</div>');
-    buffer.writeln('<div class="qa">');
-
-    for (var i = 0; i < cm.questions.length; i++) {
-      final q = cm.questions[i];
-      final qText = _escapeHtml(q.text);
-      final aHtml = _answerHtml(i < cm.answers.length ? cm.answers[i] : null);
-      buffer.writeln('<div class="q">Q${i + 1}: $qText</div>');
-      buffer.writeln('<div class="a">$aHtml</div>');
+/// ---------- HTML export ----------
+String buildExportHtmlFrom(List<ExportCard> cards) {
+  final buf = StringBuffer();
+  buf.writeln("<!doctype html>");
+  buf.writeln("<html><head><meta charset='utf-8'>");
+  buf.writeln("<title>IFS Review Export</title>");
+  buf.writeln(
+      "<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:20px;} .card{display:grid;grid-template-columns:320px 1fr;gap:16px;page-break-after:always;margin-bottom:24px;} .img{border:1px solid #ddd;padding:8px;border-radius:8px;background:#fafafa} img{max-width:100%;height:auto} h2{margin:.2rem 0 .6rem 0;font-size:1.1rem} .qa{line-height:1.45} .q{font-weight:600;margin-top:.6rem} .a{margin-left:.6rem;white-space:pre-wrap} .muted{color:#666} .badge{display:inline-block;border:1px solid #bbb;padding:2px 6px;border-radius:999px;margin-right:6px;margin-bottom:4px;font-size:.9rem}</style>");
+  buf.writeln("</head><body>");
+  for (var i = 0; i < cards.length; i++) {
+    final c = cards[i];
+    buf.writeln("<section class='card'>");
+    buf.write("<div class='img'>");
+    final imgTag = _htmlImageTag(c);
+    buf.write(imgTag);
+    buf.writeln("</div>");
+    buf.writeln("<div class='qa'>");
+    buf.writeln("<h2>Card ${i + 1}</h2>");
+    for (var q = 0; q < c.questions.length; q++) {
+      final qText = _escapeHtml(c.questions[q].text);
+      final ans = (q < c.answers.length) ? c.answers[q] : null;
+      buf.writeln("<div class='q'>Q${q + 1}: $qText</div>");
+      if (ans == null) {
+        buf.writeln("<div class='a muted'>(no answer)</div>");
+      } else if (ans is String) {
+        buf.writeln("<div class='a'>${_escapeHtml(ans)}</div>");
+      } else if (ans is List) {
+        if (ans.isEmpty) {
+          buf.writeln("<div class='a muted'>(no answer)</div>");
+        } else {
+          buf.write("<div class='a'>");
+          for (final item in ans.cast<String>()) {
+            buf.write("<span class='badge'>${_escapeHtml(item)}</span>");
+          }
+          buf.writeln("</div>");
+        }
+      } else {
+        buf.writeln("<div class='a muted'>(no answer)</div>");
+      }
     }
-
-    buffer.writeln("</div></section>");
+    buf.writeln("</div></section>");
   }
-
-  buffer.writeln("</body></html>");
-  return buffer.toString();
+  buf.writeln("</body></html>");
+  return buf.toString();
 }
 
-/// ---- PDF ----
-Future<Uint8List> buildExportPdfFrom(List<ExportCard> models) async {
-  final doc = pw.Document();
+String _htmlImageTag(ExportCard c) {
+  if (c.base64Image != null && c.base64Image!.isNotEmpty) {
+    return "<img alt='card image' src='data:image/png;base64,${c.base64Image!}'>";
+  }
+  final p = c.imagePath;
+  if (p == null || p.isEmpty) {
+    return "<div class='muted'>[image missing]</div>";
+  }
+  return "<div class='muted'>[asset: ${_escapeHtml(p)} not embedded]</div>";
+}
 
-  for (final cm in models) {
-    final imageProvider = (cm.base64Image != null && cm.base64Image!.isNotEmpty)
-        ? pw.MemoryImage(base64Decode(cm.base64Image!))
-        : null;
+/// ---------- PDF export (zero decoration: no borders, no fills, no pills) ----------
+Future<Uint8List> buildExportPdfFrom(List<ExportCard> cards) async {
+  // Use Google fonts to guarantee Unicode without local TTF parsing
+  final pw.Font regular = await PdfGoogleFonts.notoSansRegular();
+  final pw.Font bold = await PdfGoogleFonts.notoSansBold();
+
+  final theme = pw.ThemeData.withFont(base: regular, bold: bold);
+  final doc = pw.Document(theme: theme);
+
+  for (var i = 0; i < cards.length; i++) {
+    final c = cards[i];
+
+    // Image panel: no decoration at all; just constrain width.
+    final imagePanel = pw.SizedBox(
+      width: 180,
+      child: _pdfImageWidget(c),
+    );
+
+    pw.Widget answersForList(List<String> items) {
+      // Render as simple bullet text list to avoid any vector shapes.
+      return pw.Wrap(
+        spacing: 6,
+        runSpacing: 2,
+        children: items.map((s) => pw.Text("• $s", style: const pw.TextStyle(fontSize: 10))).toList(),
+      );
+    }
 
     doc.addPage(
       pw.Page(
-        build: (ctx) {
-          return pw.Container(
-            padding: const pw.EdgeInsets.all(16),
-            child: pw.Row(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                // Image (left)
-                pw.Expanded(
-                  flex: 5,
-                  child: pw.Container(
-                    padding: const pw.EdgeInsets.all(8),
-                    decoration: pw.BoxDecoration(
-                      border: pw.Border.all(color: pdf.PdfColor(0.8, 0.8, 0.8)),
+        pageFormat: PdfPageFormat.a4,
+        build: (context) {
+          return pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              imagePanel,
+              pw.SizedBox(width: 12),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      "Card ${i + 1}",
+                      style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
                     ),
-                    child: imageProvider != null
-                        ? pw.Image(imageProvider, fit: pw.BoxFit.contain)
-                        : pw.Text("Image missing: ${cm.imagePath ?? "unknown"}"),
-                  ),
+                    pw.SizedBox(height: 8),
+                    for (var q = 0; q < c.questions.length; q++)
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(bottom: 6),
+                        child: _pdfQuestionAnswerPlain(c, q, answersForList),
+                      ),
+                  ],
                 ),
-                pw.SizedBox(width: 16),
-                // QA (right)
-                pw.Expanded(
-                  flex: 7,
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: List.generate(cm.questions.length, (i) {
-                      final q = cm.questions[i];
-                      final ans = i < cm.answers.length ? cm.answers[i] : null;
-                      return pw.Padding(
-                        padding: const pw.EdgeInsets.only(bottom: 8),
-                        child: pw.Column(
-                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                          children: [
-                            pw.Text(
-                              "Q${i + 1}: ${q.text}",
-                              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                            ),
-                            pw.SizedBox(height: 4),
-                            _pdfAnswerWidget(ans),
-                          ],
-                        ),
-                      );
-                    }),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           );
         },
       ),
     );
   }
-
   return doc.save();
 }
 
-/// ---- shared helpers ----
-String _imageHtml(String? base64, String? path) {
-  if (base64 != null && base64.isNotEmpty) {
-    return '<img alt="card image" style="max-width:100%;height:auto" src="data:image/png;base64,$base64" />';
+pw.Widget _pdfImageWidget(ExportCard c) {
+  if (c.base64Image != null && c.base64Image!.isNotEmpty) {
+    try {
+      final bytes = base64Decode(c.base64Image!);
+      final img = pw.MemoryImage(bytes);
+      return pw.Image(img, fit: pw.BoxFit.contain);
+    } catch (_) {
+      return pw.Text("[image decode failed]",
+          style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey));
+    }
   }
-  final safe = _escapeHtml(path ?? "unknown");
-  return "<div>Image missing: $safe</div>";
+  if (c.imagePath != null && c.imagePath!.isNotEmpty) {
+    return pw.Text("[asset not embedded: ${c.imagePath!}]",
+        style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey));
+  }
+  return pw.Text("[image missing]",
+      style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey));
 }
 
-String _answerHtml(dynamic ans) {
-  if (ans == null) return "<em>(no answer)</em>";
-  if (ans is String) return _escapeHtml(ans);
-  if (ans is List) {
-    final parts = ans.map((e) => _escapeHtml("$e")).toList();
-    return parts.isEmpty ? "<em>(no selections)</em>" : parts.map((p) => "• $p").join("<br>");
+pw.Widget _pdfQuestionAnswerPlain(
+  ExportCard c,
+  int q,
+  pw.Widget Function(List<String>) answersForList,
+) {
+  final qText = c.questions[q].text;
+  final ans = (q < c.answers.length) ? c.answers[q] : null;
+
+  final children = <pw.Widget>[
+    pw.Text("Q${q + 1}: $qText", style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+    pw.SizedBox(height: 2),
+  ];
+
+  if (ans == null) {
+    children.add(pw.Text("(no answer)", style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey)));
+  } else if (ans is String) {
+    children.add(pw.Text(ans, style: const pw.TextStyle(fontSize: 11)));
+  } else if (ans is List) {
+    if (ans.isEmpty) {
+      children.add(pw.Text("(no answer)", style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey)));
+    } else {
+      children.add(answersForList(ans.cast<String>()));
+    }
+  } else {
+    children.add(pw.Text("(no answer)", style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey)));
   }
-  return _escapeHtml("$ans");
+
+  return pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: children,
+  );
 }
 
-/// Escape minimal HTML chars safely.
-String _escapeHtml(String s) {
-  return s
+String _escapeHtml(String input) {
+  return input
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
-}
-
-pw.Widget _pdfAnswerWidget(dynamic ans) {
-  if (ans == null) {
-    return pw.Text("(no answer)", style: pw.TextStyle(fontStyle: pw.FontStyle.italic));
-  }
-  if (ans is String) return pw.Text(ans);
-  if (ans is List) return pw.Text(ans.map((e) => "• $e").join("\n"));
-  return pw.Text("$ans");
 }
