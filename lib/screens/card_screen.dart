@@ -100,6 +100,12 @@ class CardScreen extends StatelessWidget {
         title: const Text("IFS Parts Exploration"),
         centerTitle: true,
         actions: [
+          // Help button (new)
+          IconButton(
+            tooltip: "Help",
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => _showHelpDialog(context),
+          ),
           IconButton(
             tooltip: "Toggle light/dark",
             onPressed: () => context.read<ThemeController>().toggle(),
@@ -738,4 +744,77 @@ String _qText(dynamic q) {
     if (t is String) return t;
   } catch (_) {}
   return "Question";
+}
+
+/// --------- Help dialog ---------
+void _showHelpDialog(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (ctx) {
+      final textTheme = Theme.of(ctx).textTheme;
+      return AlertDialog(
+        title: const Text("Help"),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("What this app does", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text(
+                  "Browse a deck of images. If you notice a reaction to any card, you can answer one or more questions about it. "
+                  "After you navigate away from the card, your answers are saved for this session so you can export them to your device and refer to them later. "
+                  "When you close the app, the next time you open it starts a new review session (prior answers are not available in the app).",
+                ),
+                const SizedBox(height: 16),
+                Text("Navigation", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text(
+                  "Back / Forward: use the on-screen buttons or the Left/Right Arrow keys.\n"
+                  "Wrap-around: after the last card, you loop back to the first (and vice-versa).\n"
+                  "Shuffle: cards are randomized each time you open the app.",
+                ),
+                const SizedBox(height: 16),
+                Text("Counter", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text("“Card X of Y” shows your position in this session — not any file name or card identifier."),
+                const SizedBox(height: 16),
+                Text("Exporting", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text(
+                  "Export your answered cards to HTML or PDF. Files are saved to your Downloads folder "
+                  "(or Documents if Downloads isn’t available). Filenames look like ifs_review_YYYYMMDD_HHMMSS.*",
+                ),
+                const SizedBox(height: 16),
+                Text("Theme", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text(
+                  "Toggle between Light/Dark. Depending on your OS, the first time you press the toggle it may require a second press to change. "
+                  "This will be improved in a future release.",
+                ),
+                const SizedBox(height: 16),
+                Text("Privacy", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text(
+                  "This app does not save your answers between sessions. If you export to a file, that file will be available to anyone with access to the device "
+                  "or location where it is saved. If you plan to share the file and it contains sensitive information, consider using encryption while sending it.",
+                ),
+                const SizedBox(height: 16),
+                Text("About", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text("Version is shown at the bottom-right (e.g., v1.3.0+1300)."),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text("Close"),
+          ),
+        ],
+      );
+    },
+  );
 }
