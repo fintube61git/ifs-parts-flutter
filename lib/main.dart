@@ -35,8 +35,8 @@ class IfsApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Your controller requires `total:`; use 75 per assets/images count.
-        ChangeNotifierProvider<CardController>(create: (_) => CardController(total: 75)),
+        // Use 99 cards with full shuffling on every launch
+        ChangeNotifierProvider<CardController>(create: (_) => CardController(total: 99)),
         ChangeNotifierProvider<UiHeartbeat>(create: (_) => UiHeartbeat()),
         ChangeNotifierProvider<ThemeController>(create: (_) => ThemeController()),
       ],
@@ -223,8 +223,8 @@ String _answerHtml(dynamic ans) {
 String _escapeHtml(String s) {
   return s
       .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
+      .replaceAll("<", "<")
+      .replaceAll(">", ">")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
 }

@@ -14,12 +14,19 @@ import "../main.dart" show ThemeController, ExportCard, ExportQuestion, buildExp
 /// --------- Default export directory & helpers (Downloads -> Documents) ---------
 Future<Directory> _defaultExportDirectory() async {
   try {
-    final dir = await getDownloadsDirectory();
-    if (dir != null) return dir;
+    // On macOS, Downloads is often restricted — use Documents instead
+    if (Platform.isMacOS) {
+      final docs = await getApplicationDocumentsDirectory();
+      if (docs.existsSync()) return docs;
+    }
+    // On Windows/Linux, try Downloads first
+    final downloads = await getDownloadsDirectory();
+    if (downloads != null && downloads.existsSync()) return downloads;
   } catch (_) {}
+  // Final fallback for all platforms
   try {
-    final dir = await getApplicationDocumentsDirectory();
-    return dir;
+    final docs = await getApplicationDocumentsDirectory();
+    return docs;
   } catch (_) {
     return Directory.current;
   }
@@ -40,10 +47,16 @@ class CardScreen extends StatelessWidget {
 
     final dynamic ctrl = context.watch<CardController>();
 
-    final int total = _readInt(() => ctrl.total, orElse: () => _readInt(() => ctrl.totalCards, orElse: () => 75));
-    final int idx   = _readInt(() => ctrl.index, orElse: () => _readInt(() => ctrl.currentIndex, orElse: () => 0));
-    final int humanIndex = (idx + 1).clamp(1, total);
+    // Total cards (always 99)
+    final int total = 99;
 
+    // REAL original card index (0-based, for assets/answers)
+    final int originalCardIndex = ctrl.originalCardIndex;
+
+    // HUMAN COUNTER (visible position → 1-based for "Card X of Y")
+    final int humanIndex = ctrl.displayIndexOneBased;
+
+    // Answer counts (controller first, then AnswerStore)
     final int controllerAnswered = _readInt(
       () => ctrl.answeredCount,
       orElse: () => _readInt(() => ctrl.answeredCardCount, orElse: () => 0),
@@ -51,23 +64,25 @@ class CardScreen extends StatelessWidget {
     final int fallbackAnswered = AnswerStore.instance.answeredCardCount(total);
     final int answeredCount = controllerAnswered + fallbackAnswered;
 
+    // Image path (controller path if provided; else resolver will probe)
     String? imagePath;
     try {
       imagePath = ctrl.currentImagePath();
     } catch (_) {
       try {
-        imagePath = ctrl.imagePathForCurrentCard(idx);
+        imagePath = ctrl.imagePathForCurrentCard(originalCardIndex);
       } catch (_) {
         imagePath = null;
       }
     }
 
+    // Questions (controller-provided or from questions.json)
     List<dynamic> questions;
     try {
       questions = List<dynamic>.from(ctrl.currentQuestions());
     } catch (_) {
       try {
-        questions = List<dynamic>.from(ctrl.questionsForCard(idx));
+        questions = List<dynamic>.from(ctrl.questionsForCard(originalCardIndex));
       } catch (_) {
         questions = const <dynamic>[];
       }
@@ -75,6 +90,11 @@ class CardScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          tooltip: "Help",
+          icon: const Icon(Icons.help_outline),
+          onPressed: () => _showHelpDialog(context),
+        ),
         title: const Text("IFS Parts Exploration"),
         centerTitle: true,
         actions: [
@@ -133,7 +153,7 @@ class CardScreen extends StatelessWidget {
                           child: SingleChildScrollView(
                             scrollDirection: Axis.vertical,
                             child: _CardImage(
-                              cardIndex: idx,
+                              cardIndex: originalCardIndex, // REAL original index drives asset lookup
                               providedAssetPath: imagePath,
                             ),
                           ),
@@ -148,7 +168,7 @@ class CardScreen extends StatelessWidget {
                       child: Column(
                         children: [
                           _NavBar(
-                            humanIndex: humanIndex,
+                            humanIndex: humanIndex, // COUNTER position
                             total: total,
                             onBack: () {
                               try { ctrl.prev(); return; } catch (_) {}
@@ -164,7 +184,7 @@ class CardScreen extends StatelessWidget {
                             child: _QuestionsArea(
                               ctrl: ctrl,
                               totalCards: total,
-                              cardIndex: idx,
+                              cardIndex: originalCardIndex, // REAL original index for answers/questions
                               providedQuestions: questions,
                             ),
                           ),
@@ -194,7 +214,7 @@ class CardScreen extends StatelessWidget {
 class _CardImage extends StatelessWidget {
   const _CardImage({required this.cardIndex, required this.providedAssetPath});
 
-  final int cardIndex; // 0-based
+  final int cardIndex; // REAL original index, 0-based
   final String? providedAssetPath;
 
   Future<String?> _resolveAsset() async {
@@ -254,7 +274,7 @@ class _CardImage extends StatelessWidget {
   }
 }
 
-/// ------- Questions area (with fallbacks; ListView is non-primary so Space reaches TextField) --------
+/// ------- Questions area --------
 class _QuestionsArea extends StatefulWidget {
   const _QuestionsArea({
     required this.ctrl,
@@ -265,7 +285,7 @@ class _QuestionsArea extends StatefulWidget {
 
   final dynamic ctrl;
   final int totalCards;
-  final int cardIndex;
+  final int cardIndex; // REAL original index
   final List<dynamic> providedQuestions;
 
   @override
@@ -546,11 +566,27 @@ Future<void> _exportHtml(BuildContext context, dynamic ctrl, int total) async {
   await f.writeAsBytes(bytes, flush: true);
   messenger.showSnackBar(
     SnackBar(
-      content: Text("Saved HTML: $path"),
+      content: const Text("Saved HTML file"),
       duration: const Duration(seconds: 8),
       action: SnackBarAction(
-        label: "Copy Path",
-        onPressed: () => Clipboard.setData(ClipboardData(text: path)),
+        label: "Show",
+        onPressed: () {
+          // Reveal file in Finder (macOS) or Explorer (Windows)
+          if (Platform.isMacOS) {
+            try {
+              Process.runSync('open', ['-R', path]);
+            } catch (e) {
+              // Fallback: open the folder
+              Process.runSync('open', [dir.path]);
+            }
+          } else if (Platform.isWindows) {
+            try {
+              Process.runSync('explorer', ['/select,', path]);
+            } catch (e) {
+              Process.runSync('explorer', [dir.path]);
+            }
+          }
+        },
       ),
     ),
   );
@@ -570,11 +606,27 @@ Future<void> _exportPdf(BuildContext context, dynamic ctrl, int total) async {
   await f.writeAsBytes(pdfBytes, flush: true);
   messenger.showSnackBar(
     SnackBar(
-      content: Text("Saved PDF: $path"),
+      content: const Text("Saved PDF file"),
       duration: const Duration(seconds: 8),
       action: SnackBarAction(
-        label: "Copy Path",
-        onPressed: () => Clipboard.setData(ClipboardData(text: path)),
+        label: "Show",
+        onPressed: () {
+          // Reveal file in Finder (macOS) or Explorer (Windows)
+          if (Platform.isMacOS) {
+            try {
+              Process.runSync('open', ['-R', path]);
+            } catch (e) {
+              // Fallback: open the folder
+              Process.runSync('open', [dir.path]);
+            }
+          } else if (Platform.isWindows) {
+            try {
+              Process.runSync('explorer', ['/select,', path]);
+            } catch (e) {
+              Process.runSync('explorer', [dir.path]);
+            }
+          }
+        },
       ),
     ),
   );
@@ -644,13 +696,14 @@ Future<List<ExportCard>> _gatherExportModels(
   }
 
   List<ExportCard> out = [];
-  for (var i = 0; i < total; i++) {
+  // Iterate over ORIGINAL card indices (0 to 98), not shuffled positions
+  for (var originalIndex = 0; originalIndex < total; originalIndex++) {
     // Choose the questions for this card
     List<dynamic> qs;
     if (sharedQuestions) {
       qs = base7;
-    } else if (all.length >= (i + 1) * 7) {
-      final start = i * 7;
+    } else if (all.length >= (originalIndex + 1) * 7) {
+      final start = originalIndex * 7;
       qs = all.sublist(start, start + 7);
     } else {
       // fallback: at least provide the first 7 if present
@@ -663,22 +716,22 @@ Future<List<ExportCard>> _gatherExportModels(
     for (var q = 0; q < qCount; q++) {
       dynamic ans;
       try {
-        final v = ctrl.getTextAnswer(i, q);
+        final v = ctrl.getTextAnswer(originalIndex, q);
         if (v is String && v.isNotEmpty) ans = v;
       } catch (_) {}
       if (ans == null) {
         try {
-          final v = ctrl.getCheckboxAnswer(i, q);
+          final v = ctrl.getCheckboxAnswer(originalIndex, q);
           if (v is Set<String>) ans = v.toList();
           if (v is List) ans = v.cast<String>();
         } catch (_) {}
       }
       if (ans == null) {
-        final t = AnswerStore.instance.getText(i, q);
+        final t = AnswerStore.instance.getText(originalIndex, q);
         if (t.isNotEmpty) {
           ans = t;
         } else {
-          final s = AnswerStore.instance.getChecked(i, q);
+          final s = AnswerStore.instance.getChecked(originalIndex, q);
           if (s.isNotEmpty) ans = s.toList();
         }
       }
@@ -694,7 +747,7 @@ Future<List<ExportCard>> _gatherExportModels(
     });
     if (!hasAny) continue;
 
-    final (b64, imgPath) = await probeImage(i);
+    final (b64, imgPath) = await probeImage(originalIndex);
 
     out.add(ExportCard(
       base64Image: b64,
@@ -716,4 +769,77 @@ String _qText(dynamic q) {
     if (t is String) return t;
   } catch (_) {}
   return "Question";
+}
+
+/// --------- Help dialog ---------
+void _showHelpDialog(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (ctx) {
+      final textTheme = Theme.of(ctx).textTheme;
+      return AlertDialog(
+        title: const Text("Help"),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("What this app does", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text(
+                  "Browse a deck of images. If you notice a reaction to any card, you can answer one or more questions about it. "
+                  "After you navigate away from the card, your answers are saved for this session so you can export them to your device and refer to them later. "
+                  "When you close the app, the next time you open it starts a new review session (prior answers are not available in the app).",
+                ),
+                const SizedBox(height: 16),
+                Text("Navigation", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text(
+                  "Back / Forward: use the on-screen buttons or the Left/Right Arrow keys.\n"
+                  "Wrap-around: after the last card, you loop back to the first (and vice-versa).\n"
+                  "Shuffle: cards are randomized each time you open the app.",
+                ),
+                const SizedBox(height: 16),
+                Text("Counter", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text("“Card X of Y” shows your position in this session — not any file name or card identifier."),
+                const SizedBox(height: 16),
+                Text("Exporting", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text(
+                  "Export your answered cards to HTML or PDF. Files are saved to your Downloads folder "
+                  "(or Documents if Downloads isn’t available). Filenames look like ifs_review_YYYYMMDD_HHMMSS.*",
+                ),
+                const SizedBox(height: 16),
+                Text("Theme", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text(
+                  "Toggle between Light/Dark. Depending on your OS, the first time you press the toggle it may require a second press to change. "
+                  "This will be improved in a future release.",
+                ),
+                const SizedBox(height: 16),
+                Text("Privacy", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text(
+                  "This app does not save your answers between sessions. If you export to a file, that file will be available to anyone with access to the device "
+                  "or location where it is saved. If you plan to share the file and it contains sensitive information, consider using encryption while sending it.",
+                ),
+                const SizedBox(height: 16),
+                Text("About", style: textTheme.titleMedium),
+                const SizedBox(height: 4),
+                const Text("Version is shown at the bottom-right (e.g., v1.3.0+1300)."),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text("Close"),
+          ),
+        ],
+      );
+    },
+  );
 }
