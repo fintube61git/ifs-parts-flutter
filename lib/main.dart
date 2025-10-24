@@ -1,4 +1,4 @@
-﻿import "dart:convert";
+import "dart:convert";
 import "dart:typed_data";
 
 import "package:flutter/material.dart";
@@ -7,26 +7,15 @@ import "package:pdf/widgets.dart" as pw;
 import "package:pdf/pdf.dart" as pdf; // for PdfColor
 
 import "controllers/card_controller.dart";
+import "controllers/theme_controller.dart";
 import "controllers/ui_heartbeat.dart";
 import "screens/card_screen.dart";
+import "screens/landing_page.dart"; // ← ADDED: import for new Landing Page
 
 void main() {
   runApp(const IfsApp());
 }
 
-class ThemeController with ChangeNotifier {
-  ThemeMode mode = ThemeMode.system;
-  void toggle() {
-    if (mode == ThemeMode.light) {
-      mode = ThemeMode.dark;
-    } else if (mode == ThemeMode.dark) {
-      mode = ThemeMode.light;
-    } else {
-      mode = ThemeMode.dark;
-    }
-    notifyListeners();
-  }
-}
 
 class IfsApp extends StatelessWidget {
   const IfsApp({super.key});
@@ -54,20 +43,9 @@ class IfsApp extends StatelessWidget {
             colorSchemeSeed: Colors.indigo,
             brightness: Brightness.dark,
           ),
-          home: const _HomeShell(),
+          home: const LandingPage(), // ← CHANGED: now uses LandingPage
         ),
       ),
-    );
-  }
-}
-
-class _HomeShell extends StatelessWidget {
-  const _HomeShell();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: CardScreen(),
     );
   }
 }

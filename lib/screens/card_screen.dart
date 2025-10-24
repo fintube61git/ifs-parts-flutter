@@ -8,8 +8,9 @@ import "package:provider/provider.dart";
 
 import "../controllers/card_controller.dart";
 import "../controllers/ui_heartbeat.dart";
+import "../controllers/theme_controller.dart"; // ← NEW
 import "../services/answer_store.dart";
-import "../main.dart" show ThemeController, ExportCard, ExportQuestion, buildExportHtmlFrom, buildExportPdfFrom;
+import "../main.dart" show ExportCard, ExportQuestion, buildExportHtmlFrom, buildExportPdfFrom; // ← ThemeController REMOVED from here
 
 /// --------- Default export directory & helpers (Downloads -> Documents) ---------
 Future<Directory> _defaultExportDirectory() async {
