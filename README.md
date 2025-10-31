@@ -68,17 +68,24 @@ Running multiple versions can cause confusion or data conflicts. **Always remove
 
 ## 📥 Install IFS Parts v2.0.0
 
-All platforms are now **✅ Released**.
+✅ **All platforms are now released.**  
 
-| Platform | Status     | Download |
-|----------|------------|----------|
-| Windows  | ✅ Released | [IFS Parts Windows.zip](https://github.com/fintube61git/ifs-parts-flutter/releases/tag/v2.0.0) |
-| macOS    | ✅ Released | [IFS Parts macOS v2.0.0.dmg](https://github.com/fintube61git/ifs-parts-flutter/releases/tag/v2.0.0) |
-| Linux    | ✅ Released | [IFS Parts Linux.zip](https://github.com/fintube61git/ifs-parts-flutter/releases/tag/v2.0.0) |
+To download the app:
+
+1. **Scroll down to the "Assets" section** at the bottom of this page  
+2. Download the file for your operating system:
+   - **Windows**: `IFS Parts Windows.zip`
+   - **macOS**: `IFS Parts macOS v2.0.0.dmg`
+   - **Linux**: `IFS Parts Linux.zip`
+
+> 💡 **Tip**: Avoid installing in `Downloads` or `Desktop` — use a stable folder like:
+> - Windows: `C:\Apps\IFS Parts\`
+> - macOS: `/Applications/`
+> - Linux: `~/Apps/IFS Parts/`
 
 ### Windows Installation
 
-1. Download **IFS Parts Windows.zip**  
+1. Download `IFS Parts Windows.zip` from **Assets below**  
 2. Extract the **entire folder** to a permanent location (e.g., `C:\Apps\IFS Parts\`)  
    ❌ Avoid `Downloads`, `Desktop`, or temporary folders — Windows may auto-delete them!  
 3. Open the folder and double-click `parts_app.exe`  
@@ -86,7 +93,7 @@ All platforms are now **✅ Released**.
 
 ### macOS Installation
 
-1. Download **IFS Parts macOS v2.0.0.dmg**  
+1. Download `IFS Parts macOS v2.0.0.dmg` from **Assets below**  
 2. Open the `.dmg` file  
 3. Drag **IFS Parts** into your **Applications** folder  
 4. **Eject the disk image**  
@@ -99,10 +106,11 @@ All platforms are now **✅ Released**.
 
 ### Linux Installation
 
-1. Download **IFS Parts Linux.zip**  
+1. Download `IFS Parts Linux.zip` from **Assets below**  
 2. Extract to a permanent location (e.g., `~/Apps/IFS Parts/`)  
    ❌ Avoid `~/Downloads` — some distros auto-clean it!  
 3. Open a terminal in the extracted folder  
 4. Make the app executable (if needed):  
    ```bash
+   chmod +x parts_app
    chmod +x parts_app
