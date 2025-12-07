@@ -1,6 +1,16 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 
+/// Controller for managing card navigation and shuffling.
+/// 
+/// This controller handles:
+/// - Shuffling cards on initialization
+/// - Navigation between cards (with wrapping)
+/// - Tracking current position and original card indices
+/// 
+/// The controller maintains a shuffled order of cards and provides
+/// circular navigation, meaning you can go forward from the last card
+/// to wrap to the first, and vice versa.
 class CardController extends ChangeNotifier {
   final int total;
   final List<int> _shuffledOrder;
