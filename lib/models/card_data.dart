@@ -24,22 +24,18 @@ class CardData {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is CardData &&
-        other.imageAsset == imageAsset &&
-        _listEquals(other.questions, questions);
+    if (other is! CardData) return false;
+    if (other.imageAsset != imageAsset) return false;
+    if (other.questions.length != questions.length) return false;
+    for (var i = 0; i < questions.length; i++) {
+      if (other.questions[i] != questions[i]) return false;
+    }
+    return true;
   }
 
   @override
   int get hashCode {
     return Object.hash(imageAsset, Object.hashAll(questions));
-  }
-
-  bool _listEquals<T>(List<T> a, List<T> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
   }
 
   @override

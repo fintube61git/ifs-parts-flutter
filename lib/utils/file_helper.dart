@@ -17,7 +17,8 @@ class FileHelper {
       final downloads = await getDownloadsDirectory();
       if (downloads != null && downloads.existsSync()) return downloads;
     } catch (_) {
-      // Silently catch and continue to fallback
+      // Catch filesystem access exceptions (permission errors, path not found)
+      // and continue to fallback
     }
     
     // Final fallback for all platforms
@@ -61,7 +62,7 @@ class FileHelper {
       } else if (Platform.isWindows) {
         // Try to reveal the specific file
         try {
-          await Process.run('explorer', ['/select,', filePath]);
+          await Process.run('explorer', ['/select,$filePath']);
         } catch (_) {
           // Fallback: open the folder
           await Process.run('explorer', [fallbackDir.path]);

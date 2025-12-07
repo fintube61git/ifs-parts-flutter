@@ -30,24 +30,18 @@ class Question {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is Question &&
-        other.id == id &&
-        other.text == text &&
-        other.type == type &&
-        _listEquals(other.options, options);
+    if (other is! Question) return false;
+    if (other.id != id || other.text != text || other.type != type) return false;
+    if (other.options.length != options.length) return false;
+    for (var i = 0; i < options.length; i++) {
+      if (other.options[i] != options[i]) return false;
+    }
+    return true;
   }
 
   @override
   int get hashCode {
     return Object.hash(id, text, type, Object.hashAll(options));
-  }
-
-  bool _listEquals<T>(List<T> a, List<T> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
   }
 
   @override
