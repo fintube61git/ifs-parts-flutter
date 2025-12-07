@@ -8,36 +8,13 @@ import "package:provider/provider.dart";
 
 import "../controllers/card_controller.dart";
 import "../controllers/ui_heartbeat.dart";
-import "../controllers/theme_controller.dart"; // ← NEW
+import "../controllers/theme_controller.dart";
 import "../services/answer_store.dart";
-import "../main.dart" show ExportCard, ExportQuestion, buildExportHtmlFrom, buildExportPdfFrom; // ← ThemeController REMOVED from here
-
-/// --------- Default export directory & helpers (Downloads -> Documents) ---------
-Future<Directory> _defaultExportDirectory() async {
-  try {
-    // On macOS, Downloads is often restricted — use Documents instead
-    if (Platform.isMacOS) {
-      final docs = await getApplicationDocumentsDirectory();
-      if (docs.existsSync()) return docs;
-    }
-    // On Windows/Linux, try Downloads first
-    final downloads = await getDownloadsDirectory();
-    if (downloads != null && downloads.existsSync()) return downloads;
-  } catch (_) {}
-  // Final fallback for all platforms
-  try {
-    final docs = await getApplicationDocumentsDirectory();
-    return docs;
-  } catch (_) {
-    return Directory.current;
-  }
-}
-
-String _timestamp() {
-  final now = DateTime.now();
-  String two(int v) => v.toString().padLeft(2, "0");
-  return "${now.year}${two(now.month)}${two(now.day)}_${two(now.hour)}${two(now.minute)}${two(now.second)}";
-}
+import "../models/export_models.dart";
+import "../exports/export_service.dart";
+import "../utils/constants.dart";
+import "../utils/file_helper.dart";
+import "../utils/responsive_helper.dart";
 
 class CardScreen extends StatelessWidget {
   const CardScreen({super.key});
@@ -48,8 +25,8 @@ class CardScreen extends StatelessWidget {
 
     final dynamic ctrl = context.watch<CardController>();
 
-    // Total cards (always 99)
-    final int total = 99;
+    // Total cards
+    final int total = AppConstants.totalCards;
 
     // REAL original card index (0-based, for assets/answers)
     final int originalCardIndex = ctrl.originalCardIndex;
@@ -559,9 +536,9 @@ Future<void> _exportHtml(BuildContext context, dynamic ctrl, int total) async {
     messenger.showSnackBar(const SnackBar(content: Text("No answered cards to export.")));
     return;
   }
-  final dir = await _defaultExportDirectory();
-  final path = "${dir.path}${Platform.pathSeparator}ifs_review_${_timestamp()}.html";
-  final html = buildExportHtmlFrom(models);
+  final path = await FileHelper.generateExportPath('ifs_review', 'html');
+  final dir = await FileHelper.getDefaultExportDirectory();
+  final html = ExportService.buildHtmlExport(models);
   final bytes = utf8.encode(html);
   final f = File(path);
   await f.writeAsBytes(bytes, flush: true);
@@ -571,23 +548,7 @@ Future<void> _exportHtml(BuildContext context, dynamic ctrl, int total) async {
       duration: const Duration(seconds: 8),
       action: SnackBarAction(
         label: "Show",
-        onPressed: () {
-          // Reveal file in Finder (macOS) or Explorer (Windows)
-          if (Platform.isMacOS) {
-            try {
-              Process.runSync('open', ['-R', path]);
-            } catch (e) {
-              // Fallback: open the folder
-              Process.runSync('open', [dir.path]);
-            }
-          } else if (Platform.isWindows) {
-            try {
-              Process.runSync('explorer', ['/select,', path]);
-            } catch (e) {
-              Process.runSync('explorer', [dir.path]);
-            }
-          }
-        },
+        onPressed: () => FileHelper.revealInExplorer(path, dir),
       ),
     ),
   );
@@ -600,9 +561,9 @@ Future<void> _exportPdf(BuildContext context, dynamic ctrl, int total) async {
     messenger.showSnackBar(const SnackBar(content: Text("No answered cards to export.")));
     return;
   }
-  final dir = await _defaultExportDirectory();
-  final path = "${dir.path}${Platform.pathSeparator}ifs_review_${_timestamp()}.pdf";
-  final pdfBytes = await buildExportPdfFrom(models);
+  final path = await FileHelper.generateExportPath('ifs_review', 'pdf');
+  final dir = await FileHelper.getDefaultExportDirectory();
+  final pdfBytes = await ExportService.buildPdfExport(models);
   final f = File(path);
   await f.writeAsBytes(pdfBytes, flush: true);
   messenger.showSnackBar(
@@ -611,23 +572,7 @@ Future<void> _exportPdf(BuildContext context, dynamic ctrl, int total) async {
       duration: const Duration(seconds: 8),
       action: SnackBarAction(
         label: "Show",
-        onPressed: () {
-          // Reveal file in Finder (macOS) or Explorer (Windows)
-          if (Platform.isMacOS) {
-            try {
-              Process.runSync('open', ['-R', path]);
-            } catch (e) {
-              // Fallback: open the folder
-              Process.runSync('open', [dir.path]);
-            }
-          } else if (Platform.isWindows) {
-            try {
-              Process.runSync('explorer', ['/select,', path]);
-            } catch (e) {
-              Process.runSync('explorer', [dir.path]);
-            }
-          }
-        },
+        onPressed: () => FileHelper.revealInExplorer(path, dir),
       ),
     ),
   );

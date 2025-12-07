@@ -1,28 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
-
-/// Question model (supports text and checkbox)
-class Question {
-  final String id;           // stable key (e.g., "Q1" or "Self_Check")
-  final String text;         // prompt to display
-  final String type;         // "text" | "checkbox"
-  final List<String> options; // for checkbox only
-
-  const Question({
-    required this.id,
-    required this.text,
-    required this.type,
-    this.options = const [],
-  });
-}
-
-/// One card: its image asset and its list of questions.
-class CardData {
-  final String imageAsset;
-  final List<Question> questions;
-  const CardData({required this.imageAsset, required this.questions});
-}
+import '../models/question.dart';
+import '../models/card_data.dart';
+import '../utils/constants.dart';
 
 /// Loads images and questions from assets/ and exposes them to the UI.
 class DataService extends ChangeNotifier {
