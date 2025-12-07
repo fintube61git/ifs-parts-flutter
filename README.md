@@ -7,6 +7,12 @@ Explore 99 therapeutic cards, reflect on your parts, and export your session —
 
 > ℹ️ **For educational and personal use only** — not a substitute for therapy or emergency care.
 
+## 📚 Developer Documentation
+
+- **[Architecture Guide](docs/ARCHITECTURE.md)**: Comprehensive architecture documentation
+- **[Refactoring Summary](docs/REFACTORING_SUMMARY.md)**: Details of recent improvements
+- **Test Coverage**: Unit tests for all controllers, services, and models
+
 ---
 
 ## 🚫 Step 0: Remove Any Older Versions
