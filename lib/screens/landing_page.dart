@@ -1,5 +1,3 @@
-// lib/screens/landing_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../controllers/theme_controller.dart';
@@ -7,6 +5,7 @@ import '../screens/ifs_overview_screen.dart';
 import '../screens/what_are_parts_screen.dart';
 import '../screens/what_is_self_screen.dart';
 import '../screens/card_screen.dart';
+import '../utils/constants.dart';
 
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
@@ -16,7 +15,7 @@ class LandingPage extends StatelessWidget {
     return Scaffold(
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final bool isWide = constraints.maxWidth >= 700;
+          final bool isWide = constraints.maxWidth >= AppConstants.landingWideBreakpoint;
 
           return SingleChildScrollView( // ✅ Scrollable root
             child: Padding(

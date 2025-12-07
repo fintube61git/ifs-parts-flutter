@@ -8,9 +8,11 @@ import "package:provider/provider.dart";
 
 import "../controllers/card_controller.dart";
 import "../controllers/ui_heartbeat.dart";
-import "../controllers/theme_controller.dart"; // ← NEW
+import "../controllers/theme_controller.dart";
 import "../services/answer_store.dart";
-import "../main.dart" show ExportCard, ExportQuestion, buildExportHtmlFrom, buildExportPdfFrom; // ← ThemeController REMOVED from here
+import "../models/export_models.dart";
+import "../exports/export_service.dart";
+import "../utils/constants.dart";
 
 /// --------- Default export directory & helpers (Downloads -> Documents) ---------
 Future<Directory> _defaultExportDirectory() async {
@@ -48,8 +50,8 @@ class CardScreen extends StatelessWidget {
 
     final dynamic ctrl = context.watch<CardController>();
 
-    // Total cards (always 99)
-    final int total = 99;
+    // Total cards
+    final int total = AppConstants.totalCards;
 
     // REAL original card index (0-based, for assets/answers)
     final int originalCardIndex = ctrl.originalCardIndex;
@@ -561,7 +563,7 @@ Future<void> _exportHtml(BuildContext context, dynamic ctrl, int total) async {
   }
   final dir = await _defaultExportDirectory();
   final path = "${dir.path}${Platform.pathSeparator}ifs_review_${_timestamp()}.html";
-  final html = buildExportHtmlFrom(models);
+  final html = ExportService.buildHtmlExport(models);
   final bytes = utf8.encode(html);
   final f = File(path);
   await f.writeAsBytes(bytes, flush: true);
@@ -602,7 +604,7 @@ Future<void> _exportPdf(BuildContext context, dynamic ctrl, int total) async {
   }
   final dir = await _defaultExportDirectory();
   final path = "${dir.path}${Platform.pathSeparator}ifs_review_${_timestamp()}.pdf";
-  final pdfBytes = await buildExportPdfFrom(models);
+  final pdfBytes = await ExportService.buildPdfExport(models);
   final f = File(path);
   await f.writeAsBytes(pdfBytes, flush: true);
   messenger.showSnackBar(
